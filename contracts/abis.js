@@ -1,7 +1,7 @@
-const DummyStorage = require("./abis/DummyStorage.json");
+const BPool = require("./abis/BPool.json");
 
 const abis = {
-  DummyStorage,
+  BPool,
 };
 
 module.exports = abis;
