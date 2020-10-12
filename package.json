@@ -4,8 +4,8 @@
   "description": "Smart contract automation service built with the Serverless framework.",
   "author": "Yos Riady <yosriady@gmail.com>",
   "dependencies": {
-    "axios": "^0.19.2",
-    "ethers": "^5.0.3"
+    "axios": "^0.20.0",
+    "ethers": "^5.0.5"
   },
   "devDependencies": {
     "serverless-offline": "^5.7.3",
