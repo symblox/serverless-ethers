@@ -14,7 +14,8 @@ exports.handler = async function () {
   console.log("Contract ABIs loaded");
 
   // Initialize Ethers wallet
-  const provider = new ethers.providers.JsonRpcProvider(process.env.URL);
+  const provider = new ethers.providers.JsonRpcProvider({url:process.env.URL,timeout:300000});
+  console.log(provider)
   // let wallet = ethers.Wallet.fromMnemonic(process.env.MNEMONIC)
   // wallet = wallet.connect(provider)
   // console.log('Ethers wallet loaded');
