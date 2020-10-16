@@ -1,5 +1,6 @@
 const axios = require("axios");
 const ethers = require("ethers");
+const fs = require("fs");
 const { abis, addresses } = require("../contracts");
 
 const sellSyxAmount = ethers.utils.parseEther("100");
@@ -26,8 +27,36 @@ exports.handler = async function () {
   try {
     const blockNumber = await provider.getBlockNumber();
     console.log(`current block: ${blockNumber}`);
-    const price = await contract.getSpotPrice(addresses.wvlx, addresses.syx);
-    console.log(`current price: 1 SYX = ${price / 10 ** 18} VLX`);
+
+    const fileName = "./lastPrice.json";
+
+    let lastPrice;
+    if (fs.existsSync(fileName))
+        fs.readFile(fileName, function (err, data) {
+        if (err) console.log(err);
+        lastPrice = data;
+    });
+
+    let price = await contract.getSpotPrice(addresses.wvlx, addresses.syx);
+    price = price / 10 ** 18;
+    console.log(`current price: 1 SYX = ${price} VLX`);
+
+    if(lastPrice){
+      const ratio = parseFloat(price) / parseFloat(lastPrice);
+      if(ratio > 1.1){
+          console.log(`last price: ${lastPrice}, now price: ${price}. increase ${(ratio - 1 )*100}%`)
+      }else if(ratio < 0.9){
+          console.log(`last price: ${lastPrice}, now price: ${price}. decline ${(1-ratio)*100}%`)
+      }
+    }
+
+    if (fs.existsSync(fileName))
+        fs.unlinkSync(fileName);
+
+    fs.writeFile(fileName, price.toString(), function (err) {
+      if (err) console.log(err);
+    });
+
     const wvlxBalance = await contract.getBalance(addresses.wvlx);
     console.log(`wvlx total balance: ${wvlxBalance / 10 ** 18} vlx`);
     const syxBalance = await contract.getBalance(addresses.syx);
