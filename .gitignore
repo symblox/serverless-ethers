@@ -138,3 +138,4 @@ Temporary Items
 ### Serverless ###
 # Ignore build directory
 .serverless
+.env.development

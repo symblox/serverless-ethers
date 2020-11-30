@@ -1,137 +1,98 @@
-const axios = require("axios");
 const ethers = require("ethers");
 const fs = require("fs");
 const { abis, addresses } = require("../contracts");
 
-const sellSyxAmount = ethers.utils.parseEther("100");
-const sellVlxAmount = ethers.utils.parseEther("100");
-
 exports.handler = async function () {
   console.log("Starting...");
-  // Load Contract ABIs
-  const BPoolABI = abis.BPool;
-  const BPoolAddress = addresses.bpt;
-  console.log("Contract ABIs loaded");
+  const ConnectorFactoryAbi = abis.ConnectorFactory;
+  const ConnectorFactoryAddress = addresses.connectorFactory;
+
+  const ConnectorAbi = abis.BptReferralConnector;
 
   // Initialize Ethers wallet
   const provider = new ethers.providers.JsonRpcProvider({url:process.env.URL,timeout:300000});
-  console.log(provider)
-  // let wallet = ethers.Wallet.fromMnemonic(process.env.MNEMONIC)
-  // wallet = wallet.connect(provider)
-  // console.log('Ethers wallet loaded');
-
+  
   // Load contract
-  const contract = new ethers.Contract(BPoolAddress, BPoolABI, provider);
-  console.log("Contract loaded");
+  const factoryContract = new ethers.Contract(ConnectorFactoryAddress, ConnectorFactoryAbi, provider);
 
-  console.log("call data...");
   try {
     const blockNumber = await provider.getBlockNumber();
     console.log(`current block: ${blockNumber}`);
 
-    const fileName = "./lastPrice.json";
+    const factoryFilter = factoryContract.filters.LogCreateConnector();
+    factoryFilter.fromBlock = 0;
 
-    let lastPrice;
-    if (fs.existsSync(fileName))
-        fs.readFile(fileName, function (err, data) {
-        if (err) console.log(err);
-        lastPrice = data;
-    });
+    const createConnectorLogs = await provider.getLogs(factoryFilter);
+    let logsToReferral = [],logsDeposit = [], logsWithdraw = [];
+    const logsPromises = createConnectorLogs.map(async (log) => {
+      const logData = factoryContract.interface.parseLog(log);
+      const contract = new ethers.Contract(logData.args.connector, ConnectorAbi, provider);
+      const refFilter = contract.filters.LogDepositWithReferral();
+      refFilter.fromBlock = 0;
+      const refLogs = await provider.getLogs(refFilter);
+      for(let i = 0; i<refLogs.length;i++){
+        const parseData = contract.interface.parseLog(refLogs[i]);
+        parseData.blockNumber = refLogs[i].blockNumber;
+        logsToReferral.push(parseData)
+      }
+      
+      const depositFilter = contract.filters.LogDeposit();
+      depositFilter.fromBlock = 0;
+      const depositLogs = await provider.getLogs(depositFilter);
+      for(let i = 0; i<depositLogs.length;i++){
+        const parseData = contract.interface.parseLog(depositLogs[i]);
+        parseData.blockNumber = depositLogs[i].blockNumber;
+        logsDeposit.push(parseData)
+      } 
 
-    let price = await contract.getSpotPrice(addresses.wvlx, addresses.syx);
-    price = price / 10 ** 18;
-    console.log(`current price: 1 SYX = ${price} VLX`);
-
-    if(lastPrice){
-      const ratio = parseFloat(price) / parseFloat(lastPrice);
-      if(ratio > 1.1){
-          console.log(`last price: ${lastPrice}, now price: ${price}. increase ${(ratio - 1 )*100}%`)
-      }else if(ratio < 0.9){
-          console.log(`last price: ${lastPrice}, now price: ${price}. decline ${(1-ratio)*100}%`)
+      const withdrawFilter = contract.filters.LogWithdrawal();
+      withdrawFilter.fromBlock = 0;
+      const withdrawLogs = await provider.getLogs(withdrawFilter);
+      for(let i = 0; i<withdrawLogs.length;i++){
+        const parseData = contract.interface.parseLog(withdrawLogs[i]);
+        parseData.blockNumber = withdrawLogs[i].blockNumber;
+        logsWithdraw.push(parseData)
+      }  
+    })
+    await Promise.all(logsPromises);
+   
+    for(let i=0;i<logsToReferral.length;i++){
+      if(logsToReferral[i].args.dst!=logsToReferral[i].args.referral){
+        console.log(`
+blockNumber: ${logsToReferral[i].blockNumber}
+dst: ${logsToReferral[i].args.dst}
+referral: ${logsToReferral[i].args.referral}
+tokenIn: ${logsToReferral[i].args.tokenIn}
+tokenAmountIn: ${logsToReferral[i].args.tokenAmountIn.toString()}
+poolAmountOut: ${logsToReferral[i].args.poolAmountOut.toString()}
+        `)
       }
     }
 
-    if (fs.existsSync(fileName))
-        fs.unlinkSync(fileName);
+    for(let i=0;i<logsDeposit.length;i++){
+      console.log(`
+blockNumber: ${logsDeposit[i].blockNumber}
+dst: ${logsDeposit[i].args.dst}
+tokenIn: ${logsDeposit[i].args.tokenIn}
+tokenAmountIn: ${logsDeposit[i].args.tokenAmountIn.toString()}
+poolAmountOut: ${logsDeposit[i].args.poolAmountOut.toString()}
+        `)
+    }
 
-    fs.writeFile(fileName, price.toString(), function (err) {
-      if (err) console.log(err);
-    });
-
-    const wvlxBalance = await contract.getBalance(addresses.wvlx);
-    console.log(`wvlx total balance: ${wvlxBalance / 10 ** 18} vlx`);
-    const syxBalance = await contract.getBalance(addresses.syx);
-    console.log(`syx total balance: ${syxBalance / 10 ** 18} syx`);
-
-    let tokenAmountOut,
-      balanceIn,
-      denormIn,
-      balanceOut,
-      denormOut,
-      tokenIn,
-      tokenOut,
-      swapFee;
-    tokenIn = addresses.syx;
-    tokenOut = addresses.wvlx;
-    swapFee = await contract.getSwapFee();
-    balanceIn = await contract.getBalance(tokenIn);
-    denormIn = await contract.getDenormalizedWeight(tokenIn);
-    balanceOut = await contract.getBalance(tokenOut);
-    denormOut = await contract.getDenormalizedWeight(tokenOut);
-
-    tokenAmountOut = await contract.calcOutGivenIn(
-      balanceIn,
-      denormIn,
-      balanceOut,
-      denormOut,
-      sellSyxAmount,
-      swapFee
-    );
-
-    console.log(
-      `sell ${ethers.utils.formatEther(sellSyxAmount)} SYX. price is 1 SYX = ${
-        parseFloat(ethers.utils.formatEther(tokenAmountOut)) /
-        parseFloat(ethers.utils.formatEther(sellSyxAmount))
-      } VLX`
-    );
-
-    tokenIn = addresses.wvlx;
-    tokenOut = addresses.syx;
-    swapFee = await contract.getSwapFee();
-    balanceIn = await contract.getBalance(tokenIn);
-    denormIn = await contract.getDenormalizedWeight(tokenIn);
-    balanceOut = await contract.getBalance(tokenOut);
-    denormOut = await contract.getDenormalizedWeight(tokenOut);
-
-    tokenAmountOut = await contract.calcOutGivenIn(
-      balanceIn,
-      denormIn,
-      balanceOut,
-      denormOut,
-      sellVlxAmount,
-      swapFee
-    );
-
-    console.log(
-      `sell ${ethers.utils.formatEther(sellVlxAmount)} VLX. price is 1 VLX = ${
-        parseFloat(ethers.utils.formatEther(tokenAmountOut)) /
-        parseFloat(ethers.utils.formatEther(sellVlxAmount))
-      } SYX`
-    );
+    for(let i=0;i<logsWithdraw.length;i++){
+      console.log(`
+blockNumber: ${logsWithdraw[i].blockNumber}
+dst: ${logsWithdraw[i].args.dst}
+tokenOut: ${logsWithdraw[i].args.tokenOut}
+tokenAmountOut: ${logsWithdraw[i].args.tokenAmountOut.toString()}
+poolAmountIn: ${logsWithdraw[i].args.poolAmountIn.toString()}
+        `)
+    }
   } catch (err) {
-    const errorMessage = `:warning: Transaction failed: ${err.message}`;
-    console.error(errorMessage);
-    await postToSlack(errorMessage);
+    console.error(err);
     return err;
   }
 
   console.log("Completed");
   return true;
 };
-
-function postToSlack(text) {
-  const payload = JSON.stringify({
-    text,
-  });
-  return axios.post(process.env.SLACK_HOOK_URL, payload);
-}
