@@ -5,8 +5,8 @@ provider:
   region: ap-southeast-1
   timeout: 30
   environment:
-    CHAIN_ID: 111
-    URL: "https://explorer.testnet.veladev.net/rpc"
+    CHAIN_ID: 106
+    URL: "https://rpc.symblox.net:8080"
     # DEFAULT_GAS_PRICE: 60000000000
     # MNEMONIC: ""
     # FROM_ADDRESS: ""
