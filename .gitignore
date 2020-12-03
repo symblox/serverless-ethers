@@ -139,3 +139,5 @@ Temporary Items
 # Ignore build directory
 .serverless
 .env.development
+data
+data.zip

@@ -15,12 +15,12 @@ const tokensDecimal = {
 }
 
 const usdtPoolId = 2;
+const fromBlock = 0;
 
 exports.handler = async function () {
   console.log("Starting...");
   const ConnectorFactoryAbi = abis.ConnectorFactory;
   const ConnectorFactoryAddress = addresses.connectorFactory;
-
   const ConnectorAbi = abis.BptReferralConnector;
 
   // Initialize Ethers wallet
@@ -32,15 +32,14 @@ exports.handler = async function () {
     const blockNumber = await provider.getBlockNumber();
     console.log(`current block: ${blockNumber}`);
     const curTime = new Date().getTime();
-    const depositWithRefFileName = `./depositWithRef-${curTime}.json`;
-    const depositFileName = `./deposit-${curTime}.json`;
-    const withdrawFileName = `./withdraw-${curTime}.json`;
+    //const depositWithRefFileName = `./depositWithRef-${curTime}.json`;
     let blocksDate = {};
 
     const factoryFilter = factoryContract.filters.LogCreateConnector();
-    factoryFilter.fromBlock = 3000000;
+    factoryFilter.fromBlock = fromBlock;
 
     const createConnectorLogs = await provider.getLogs(factoryFilter);
+    let userObj = {};
     let logsToReferral = [],logsDeposit = [], logsWithdraw = [];
 
     for(let index = 0;index < createConnectorLogs.length;index++){
@@ -49,7 +48,7 @@ exports.handler = async function () {
       const rewardPoolId = await contract.rewardPoolId();
       if(parseInt(rewardPoolId) == usdtPoolId){
         const refFilter = contract.filters.LogDepositWithReferral();
-        refFilter.fromBlock = 3000000;
+        refFilter.fromBlock = fromBlock;
         const refLogs = await provider.getLogs(refFilter);
         console.log("request ref data:",refLogs.length);
         for(let i=0;i<refLogs.length;i++){
@@ -57,7 +56,7 @@ exports.handler = async function () {
           let parseData = contract.interface.parseLog(refLogs[i]);
           if(!blocksDate[refLogs[i].blockNumber]){
             block = await provider.getBlock(refLogs[i].blockNumber);
-            blocksDate[refLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/DD/HH HH:mm");
+            blocksDate[refLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/MM/DD HH:mm");
           }
           parseData.blockNumber = refLogs[i].blockNumber;
           parseData.date = blocksDate[refLogs[i].blockNumber];
@@ -65,7 +64,7 @@ exports.handler = async function () {
         }
         
         const depositFilter = contract.filters.LogDeposit();
-        depositFilter.fromBlock = 3000000;
+        depositFilter.fromBlock = fromBlock;
         const depositLogs = await provider.getLogs(depositFilter);
         console.log("request deposit data:",depositLogs.length);
         for(let i = 0; i < depositLogs.length;i++){
@@ -73,7 +72,7 @@ exports.handler = async function () {
           const parseData = contract.interface.parseLog(depositLogs[i]);
           if(!blocksDate[depositLogs[i].blockNumber]){
             const block = await provider.getBlock(depositLogs[i].blockNumber);
-            blocksDate[depositLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/DD/HH HH:mm");
+            blocksDate[depositLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/MM/DD HH:mm");
           }
           parseData.blockNumber = depositLogs[i].blockNumber;
           parseData.date = blocksDate[depositLogs[i].blockNumber];
@@ -81,7 +80,7 @@ exports.handler = async function () {
         }
 
         const withdrawFilter = contract.filters.LogWithdrawal();
-        withdrawFilter.fromBlock = 3000000;
+        withdrawFilter.fromBlock = fromBlock;
         const withdrawLogs = await provider.getLogs(withdrawFilter);
         console.log("request withdraw data:",withdrawLogs.length);
         for(let i=0;i<withdrawLogs.length;i++){
@@ -89,7 +88,7 @@ exports.handler = async function () {
           const parseData = contract.interface.parseLog(withdrawLogs[i]);
           if(!blocksDate[withdrawLogs[i].blockNumber]){
             const block = await provider.getBlock(withdrawLogs[i].blockNumber);
-            blocksDate[withdrawLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/DD/HH HH:mm");
+            blocksDate[withdrawLogs[i].blockNumber] = moment(block.timestamp * 1000).format("YYYY/MM/DD HH:mm");
           }
           parseData.blockNumber = withdrawLogs[i].blockNumber;
           parseData.date = blocksDate[withdrawLogs[i].blockNumber];
@@ -98,33 +97,35 @@ exports.handler = async function () {
       } 
     }
    
-    let dataArr1 = [',块高度,日期,用户,推荐人,存入代币,存入数量,获得bpt数量\n'],dataArr2 = [',块高度,日期,用户,存入代币,存入数量,获得bpt数量\n'],dataArr3 = [',块高度,日期,用户,取出代币,取出数量,存入bpt数量\n'];
     for(let i=0;i<logsToReferral.length;i++){
-      const str = `${logsToReferral[i].blockNumber},${logsToReferral[i].date},${ethToVlx(logsToReferral[i].args.dst)},${ethToVlx(logsToReferral[i].args.referral)},${tokensName[logsToReferral[i].args.tokenIn] || logsToReferral[i].args.tokenIn},${logsToReferral[i].args.tokenAmountIn / Number(`1e+${tokensDecimal[logsToReferral[i].args.tokenIn]}`)},${logsToReferral[i].args.poolAmountOut / Number(`1e18`)}\n`
-      dataArr1.push(str)
-    }
+      const str = `${logsToReferral[i].blockNumber},${logsToReferral[i].date},${ethToVlx(logsToReferral[i].args.dst)},${ethToVlx(logsToReferral[i].args.referral)},${tokensName[logsToReferral[i].args.tokenIn] || logsToReferral[i].args.tokenIn},${logsToReferral[i].args.tokenAmountIn / Number(`1e+${tokensDecimal[logsToReferral[i].args.tokenIn]}`)},${logsToReferral[i].args.poolAmountOut / Number(`1e18`)},,,\n`
 
-    fs.writeFile(depositWithRefFileName, dataArr1, function (err) {
-      if (err) console.log(err);
-    });
+      if(userObj[ethToVlx(logsToReferral[i].args.dst)]){
+        userObj[ethToVlx(logsToReferral[i].args.dst)].push(str);
+      }else{
+        userObj[ethToVlx(logsToReferral[i].args.dst)] = [",块高度,日期,用户,推荐人,存入代币,存入数量,获得bpt数量,取出代币,取出数量,存入bpt数量\n",str];
+      }
+    }
 
     for(let i=0;i<logsDeposit.length;i++){
-      const str = `${logsDeposit[i].blockNumber},${logsDeposit[i].date},${ethToVlx(logsDeposit[i].args.dst)},${tokensName[logsDeposit[i].args.tokenIn] || logsDeposit[i].args.tokenIn},${logsDeposit[i].args.tokenAmountIn / Number(`1e+${tokensDecimal[logsDeposit[i].args.tokenIn]}`)},${logsDeposit[i].args.poolAmountOut / Number(`1e18`)}\n`
-      dataArr2.push(str)
+      const str = `${logsDeposit[i].blockNumber},${logsDeposit[i].date},${ethToVlx(logsDeposit[i].args.dst)},,${tokensName[logsDeposit[i].args.tokenIn] || logsDeposit[i].args.tokenIn},${logsDeposit[i].args.tokenAmountIn / Number(`1e+${tokensDecimal[logsDeposit[i].args.tokenIn]}`)},${logsDeposit[i].args.poolAmountOut / Number(`1e18`)},,,\n`
+      if(userObj[ethToVlx(logsDeposit[i].args.dst)]){
+        userObj[ethToVlx(logsDeposit[i].args.dst)].push(str);
+      }
     }
-
-    fs.writeFile(depositFileName, dataArr2, function (err) {
-      if (err) console.log(err);
-    });
 
     for(let i=0;i<logsWithdraw.length;i++){
-      const str = `${logsWithdraw[i].blockNumber},${logsWithdraw[i].date},${ethToVlx(logsWithdraw[i].args.dst)},${tokensName[logsWithdraw[i].args.tokenOut] || logsWithdraw[i].args.tokenOut},${logsWithdraw[i].args.tokenAmountOut / Number(`1e+${tokensDecimal[logsWithdraw[i].args.tokenOut]}`)},${logsWithdraw[i].args.poolAmountIn / Number(`1e18`)}\n`
-      dataArr3.push(str)
+      const str = `${logsWithdraw[i].blockNumber},${logsWithdraw[i].date},${ethToVlx(logsWithdraw[i].args.dst)},,,,,${tokensName[logsWithdraw[i].args.tokenOut] || logsWithdraw[i].args.tokenOut},${logsWithdraw[i].args.tokenAmountOut / Number(`1e+${tokensDecimal[logsWithdraw[i].args.tokenOut]}`)},${logsWithdraw[i].args.poolAmountIn / Number(`1e18`)}\n`
+      if(userObj[ethToVlx(logsWithdraw[i].args.dst)]){
+        userObj[ethToVlx(logsWithdraw[i].args.dst)].push(str);
+      }
     }
 
-    fs.writeFile(withdrawFileName, dataArr3, function (err) {
-      if (err) console.log(err);
-    });
+    for(let i in userObj){
+      fs.writeFile(`./data/${i}-${curTime}.json`, userObj[i], function (err) {
+        if (err) console.log(err);
+      });
+    }    
   } catch (err) {
     console.error(err);
     return err;
