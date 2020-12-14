@@ -18,6 +18,10 @@ functions:
     events:
       - schedule: rate(1 minute)
       # - schedule: cron(0 12 * * ? *) # 12PM UTC
+  exec2:
+    handler: functions/exec2.handler
+    events:
+      - schedule: rate(1 minute)
 
 plugins:
   - serverless-offline

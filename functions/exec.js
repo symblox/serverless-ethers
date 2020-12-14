@@ -6,16 +6,19 @@ const moment = require("moment");
 
 const tokensName = {
   "0x2de7063fe77aAFB5b401d65E5A108649Ec577170": "SYX",
-  "0x4b773e1aE1bAA4894E51cC1D1FAF485C91B1012F": "USDT"
+  "0x4b773e1aE1bAA4894E51cC1D1FAF485C91B1012F": "USDT",
+  "0x0000000000000000000000000000000000000000": "VLX"
 }
 
 const tokensDecimal = {
   "0x2de7063fe77aAFB5b401d65E5A108649Ec577170": 18,
-  "0x4b773e1aE1bAA4894E51cC1D1FAF485C91B1012F": 6
+  "0x4b773e1aE1bAA4894E51cC1D1FAF485C91B1012F": 6,
+  "0x0000000000000000000000000000000000000000": 18
 }
 
-const usdtPoolId = 2;
+const usdtPoolId = 3;
 const fromBlock = 0;
+const toBlock = 4293935;
 
 exports.handler = async function () {
   console.log("Starting...");
@@ -37,6 +40,7 @@ exports.handler = async function () {
 
     const factoryFilter = factoryContract.filters.LogCreateConnector();
     factoryFilter.fromBlock = fromBlock;
+    factoryFilter.toBlock = toBlock;
 
     const createConnectorLogs = await provider.getLogs(factoryFilter);
     let userObj = {};
@@ -49,10 +53,11 @@ exports.handler = async function () {
       if(parseInt(rewardPoolId) == usdtPoolId){
         const refFilter = contract.filters.LogDepositWithReferral();
         refFilter.fromBlock = fromBlock;
+        refFilter.toBlock = toBlock;
         const refLogs = await provider.getLogs(refFilter);
         console.log("request ref data:",refLogs.length);
         for(let i=0;i<refLogs.length;i++){
-          console.log(i)
+          //console.log(i)
           let parseData = contract.interface.parseLog(refLogs[i]);
           if(!blocksDate[refLogs[i].blockNumber]){
             block = await provider.getBlock(refLogs[i].blockNumber);
@@ -65,10 +70,11 @@ exports.handler = async function () {
         
         const depositFilter = contract.filters.LogDeposit();
         depositFilter.fromBlock = fromBlock;
+        depositFilter.toBlock = toBlock;
         const depositLogs = await provider.getLogs(depositFilter);
         console.log("request deposit data:",depositLogs.length);
         for(let i = 0; i < depositLogs.length;i++){
-          console.log(i)
+          //console.log(i)
           const parseData = contract.interface.parseLog(depositLogs[i]);
           if(!blocksDate[depositLogs[i].blockNumber]){
             const block = await provider.getBlock(depositLogs[i].blockNumber);
@@ -81,10 +87,11 @@ exports.handler = async function () {
 
         const withdrawFilter = contract.filters.LogWithdrawal();
         withdrawFilter.fromBlock = fromBlock;
+        withdrawFilter.toBlock = toBlock;
         const withdrawLogs = await provider.getLogs(withdrawFilter);
         console.log("request withdraw data:",withdrawLogs.length);
         for(let i=0;i<withdrawLogs.length;i++){
-          console.log(i)
+          // console.log(i)
           const parseData = contract.interface.parseLog(withdrawLogs[i]);
           if(!blocksDate[withdrawLogs[i].blockNumber]){
             const block = await provider.getBlock(withdrawLogs[i].blockNumber);
@@ -96,10 +103,11 @@ exports.handler = async function () {
         }
       } 
     }
+    console.log(logsToReferral)
    
     for(let i=0;i<logsToReferral.length;i++){
       const str = `${logsToReferral[i].blockNumber},${logsToReferral[i].date},${ethToVlx(logsToReferral[i].args.dst)},${ethToVlx(logsToReferral[i].args.referral)},${tokensName[logsToReferral[i].args.tokenIn] || logsToReferral[i].args.tokenIn},${logsToReferral[i].args.tokenAmountIn / Number(`1e+${tokensDecimal[logsToReferral[i].args.tokenIn]}`)},${logsToReferral[i].args.poolAmountOut / Number(`1e18`)},,,\n`
-
+      console.log(logsToReferral[i].args.tokenIn, logsToReferral[i].args.tokenAmountIn.toString())
       if(userObj[ethToVlx(logsToReferral[i].args.dst)]){
         userObj[ethToVlx(logsToReferral[i].args.dst)].push(str);
       }else{
