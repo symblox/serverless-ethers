@@ -22,6 +22,10 @@ functions:
     handler: functions/exec2.handler
     events:
       - schedule: rate(1 minute)
+  sendRewardsToThePoolExec:
+    handler: functions/sendRewardsToThePoolExec.handler
+    events:
+      - schedule: rate(1 minute)
 
 plugins:
   - serverless-offline
